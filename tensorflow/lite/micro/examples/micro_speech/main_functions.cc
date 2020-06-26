@@ -306,9 +306,9 @@ void loop() {
 
   float y_val = output->data.f[0];
   //led=1; //off
-  printf("\n  model  output=%f",     y_val);
+  printf("\n model output=%5.3f",     y_val);
   if (y_val > 0.5) {
-        printf ("\n ----Blink---  model output=%f",     y_val  );
+        printf ("\n model output=%5.3%f --- blink ---",     y_val  );
          //led = 0; // on
          //ThisThread::sleep_for(2*800); //ms
          //led=1; // off
