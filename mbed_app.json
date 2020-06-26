@@ -1,0 +1,24 @@
+{
+"target_overrides": {
+        "*": {
+            "platform.stdio-baud-rate"                  : 115200,
+            "platform.stdio-convert-newlines"           : true,
+            "platform.stdio-buffered-serial"            : false,
+            "platform.stdio-flush-at-exit"              : true,
+            "rtos.main-thread-stack-size"               : 5120,
+            "mbed-trace.enable"                         : null,
+            "events.shared-stacksize"                   : 2048,
+            "target.printf_lib"                         : "std"
+            }
+    },
+    
+    "config": {
+       "main-stack-size": {
+            "value": 65536
+        }
+    },
+    "macros": [
+        "NDEBUG",
+        "TF_LITE_STATIC_MEMORY"
+    ]
+}
