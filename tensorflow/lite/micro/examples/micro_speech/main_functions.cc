@@ -30,9 +30,13 @@ limitations under the License.
 
 //#include "tensorflow/lite/micro/all_ops_resolver.h"
 
+#define CMSIS
+#ifdef CMSIS
 #define ARM_MATH_CM4
 #include "arm_math.h"
 #include "arm_const_structs.h"
+#endif
+
 
 #include "mbed.h"
 //#include "tensor_thread.h"
@@ -52,15 +56,37 @@ int32_t previous_time = 0;
 // Create an area of memory to use for input, output, and intermediate arrays.
 // The size of this will depend on the model you're using, and may need to be
 // determined by experimentation.
-constexpr int kTensorArenaSize = 10 * 1024;
+constexpr int kTensorArenaSize = 12 * 1024;
 uint8_t tensor_arena[kTensorArenaSize];
 
 
 static int  fft_samples[FFT_SIZE];
-static q15_t s[FFT_SIZE*2]; //has to be twice FFT size
 
-#define INT_MODEL 1
-#if INT_MODEL
+#ifdef CMSIS
+static q15_t s[FFT_SIZE*2]; //has to be twice FFT size
+#endif
+
+
+/* tensorflow/lite/c/common.h
+typedef enum {
+  kTfLiteNoType = 0,
+  kTfLiteFloat32 = 1,
+  kTfLiteInt32 = 2,
+  kTfLiteUInt8 = 3,
+  kTfLiteInt64 = 4,
+  kTfLiteString = 5,
+  kTfLiteBool = 6,
+  kTfLiteInt16 = 7,
+  kTfLiteComplex64 = 8,
+  kTfLiteInt8 = 9,
+  kTfLiteFloat16 = 10,
+  kTfLiteFloat64 = 11,
+} TfLiteType;
+*/
+//#define INT8_MODEL 9   // TODO can be initialized with -D  compile flag
+#define FLOAT32_MODEL 1 
+
+#ifdef INT8_MODEL
     int8_t*  model_input_buffer = nullptr;
 #else
     float*  model_input_buffer = nullptr;
@@ -169,27 +195,42 @@ while (k<5){
   printf("\n BEFORE model_input->dims->size =%d ", model_input->dims->size);
   printf("\n BEFORE model_input->dims->data[0] =%d ", model_input->dims->data[0]);
   printf("\n BEFORE model_input->dims->data[1] =%d ", model_input->dims->data[1]);
+  printf("\n BEFORE model_input->type =%d ", model_input->type); 
   k++;
 }
 // .lite/micro/examples/micro_speech/micro_features/micro_model_settings.h
 //printf("\n BEFORE kFeatureSliceCount =%d ", kFeatureSliceCount); //49
 //printf("\n BEFORE kFeatureSliceSize =%d ", kFeatureSliceSize); //40
 
-  if ((model_input->dims->size != 2) || (model_input->dims->data[0] != 1) ||
-     // (model_input->dims->data[1] != (kFeatureSliceCount * kFeatureSliceSize)) ||
-      model_input->dims->data[1] != FFT_SIZE ||
-      // (model_input->type != kTfLiteFloat32)    TODO make if INT_MODEL  !!!!
-       (model_input->type != kTfLiteInt8)
-      ) {
-    TF_LITE_REPORT_ERROR(error_reporter,
-                         "Bad input tensor parameters in model");
+
+
+#ifdef INT8_MODEL
+
+  if (model_input->type != kTfLiteInt8) {
+    TF_LITE_REPORT_ERROR(error_reporter, "Bad input tensor datatype in model - expected integer");
+    return;
+  }
+#else
+  if (model_input->type != kTfLiteFloat32) {
+    TF_LITE_REPORT_ERROR(error_reporter, "Bad input tensor datatype in model - expected float");
+    return;
+  }
+#endif
+
+
+  if ( model_input->dims->data[1] != FFT_SIZE) {
+    TF_LITE_REPORT_ERROR(error_reporter, "Bad input tensor size in model");
     return;
   }
 
+  if ((model_input->dims->size != 2) || (model_input->dims->data[0] != 1)) {
+    TF_LITE_REPORT_ERROR(error_reporter, "Bad input tensor dimentions in model");
+    return;
+  }
 
-  printf("\n BEFORE model_input_buffer = ...");
+ // printf("\n BEFORE model_input_buffer = ...");
 
-#if INT_MODEL
+#ifdef INT8_MODEL
   model_input_buffer = model_input->data.int8;
 #else
   model_input_buffer = model_input->data.f;
@@ -204,7 +245,7 @@ void cmsis_fft(int* data, int data_size)
     printf ("Error data_size=%d != FFT_SIZE=%d",data_size , FFT_SIZE);
     return;
   }
-
+ 
   static arm_rfft_instance_q15 fft_instance;
   //static q15_t s[FFT_SIZE*2]; //has to be twice FFT size
   arm_status status = arm_rfft_init_q15(
@@ -221,6 +262,8 @@ void cmsis_fft(int* data, int data_size)
 
   arm_rfft_q15(&fft_instance, (q15_t*)data, s);
   arm_abs_q15(s, s, FFT_SIZE*2);
+
+ 
 }
 
 // The name of this function is important for Arduino compatibility.
@@ -254,19 +297,21 @@ void loop() {
       //return;
   }
 
+ //printf("\n invoking interprener \n");
+//return;   // TODO
 //-------------------------------------
 // Copy feature buffer to input tensor
 // ------------------------------------
-
+ 
   for (int i = 0; i < kFeatureElementCount; i++) {
-    #if INT_MODEL
+    #ifdef INT8_MODEL
         model_input_buffer[i] = s[i];
     #else
         model_input_buffer[i] = float(s[i]);
     #endif
   }
 
-  // Run the model  
+  // Run the model
   TfLiteStatus invoke_status = interpreter->Invoke();
   if (invoke_status != kTfLiteOk) {
     TF_LITE_REPORT_ERROR(error_reporter, "Invoke failed");
@@ -276,14 +321,18 @@ void loop() {
   // Obtain a pointer to the output tensor
   TfLiteTensor* output = interpreter->output(0);
 
-  #if INT_MODEL
+  #ifdef INT8_MODEL
         int y_val = output->data.int8[0];
         printf("\n model output=%d",  y_val);
   #else
         float y_val = output->data.f[0];
         printf("\n model output=%5.3f",     y_val);
+
+        for (int i=0; i<10; i++){
+            printf("\n i=%d model output=%5.3f",   i , output->data.f[i]);
+        }
         if (y_val > 0.5) {
-             printf ("\n model output=%5.3%f --- failing water pump ---",     y_val  );
+             printf ("\n model output=%5.3f --- failing water pump ---",     y_val  );
         }
   #endif
 
