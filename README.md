@@ -12,8 +12,8 @@ mbed compile --target K66F --toolchain GCC_ARM -DMODEL=1 --profile release --fla
 To pass the model name to gcc use -DMODEL=...
 E.g.:
 ```
--DMODEL=1    - for NN_noQuantization (Logistic Regression)
--DMODEL=2    - for QAWmodel (Softmax and Quantizatioj)
+-DMODEL=1    - for QAWmodel (Softmax and Quantization)
+-DMODEL=2    - for NN_noQuantization (Logistic Regression)
 ```
 ### Types supported by tensor
 ```
