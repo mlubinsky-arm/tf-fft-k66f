@@ -97,22 +97,72 @@ typedef enum {
 #define   M_kTfLiteFloat64   11
 
 // MODEL  can be initialized with -D  compile flag
-#if  MODEL == 1      // SoftMax Quantization float32
+#if MODEL == 0    //reserved for data collection (prints FFT)
+#define MODEL_TYPE 0
+#elif  MODEL == 1      // SoftMax Quantization float32
 #define MODEL_TYPE M_kTfLiteFloat32
 #elif  MODEL == 2    // Logistic   float32
 #define MODEL_TYPE M_kTfLiteFloat32
 #else 
-#define MODEL_TYPE 0  //reserved for data collection
+#define MODEL 0  //reserved for data collection (prints FFT)
+#define MODEL_TYPE 0
 #endif
 
 #if MODEL_TYPE  == M_kTfLiteInt8
     int8_t*  model_input_buffer = nullptr;
 #elif MODEL_TYPE  == M_kTfLiteFloat32
     float*  model_input_buffer = nullptr;
-#else
-    printf("\n ERROR: model type is not defined   \n");
+//#else
+//    printf("\n ERROR: model type is not defined   \n");
 #endif
 }  // namespace
+
+
+//--------------- cannot convert 'q15_t*' {aka 'short int*'} to 'int*'
+void printFFT(short int* s, int data_size){ 
+   static int header=1; //disable header
+/*   
+    static char *fmt_float=
+// 1    2    3    4    5  6   7    8    9   10    11   12  13   14   15   16   17    18   19   20   21   22   23   24   25   26   27   28   29  30    31   32
+"%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\
+%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f"
+//   ;
+*/
+  static const char *fmt_int=
+  //1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32
+  "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,"
+  ;
+
+  if (header == 0){
+      float freq;
+      for (int i=0; i < data_size; i++) {  // 2048 times this is slow
+          freq =  float(i*16000.0)/FFT_SIZE;
+          printf("%.2f,",freq);
+      }
+
+      printf("\n");
+      header=1; // to call it once
+  }
+  // To speedup we call printf() once per 64 datapoins; another possible improvement: use sprintf
+  for (int i=0; i < data_size-1; i+=64) {
+
+    printf(fmt_int, s[i],  s[i+1], s[i+2], s[i+3], s[i+4], s[i+5], s[i+6], s[i+7], s[i+8], s[i+9], s[i+10],s[i+11],s[i+12],s[i+13],s[i+14],s[i+15],
+                   s[i+16],s[i+17],s[i+18],s[i+19],s[i+20],s[i+21],s[i+22],s[i+23],s[i+24],s[i+25],s[i+26],s[i+27],s[i+28],s[i+29],s[i+30],s[i+31],
+                   s[i+32],s[i+33],s[i+34],s[i+35],s[i+36],s[i+37],s[i+38],s[i+39],s[i+40],s[i+41],s[i+42],s[i+43],s[i+44],s[i+45],s[i+46],s[i+47],
+                   s[i+48],s[i+49],s[i+50],s[i+51],s[i+52],s[i+53],s[i+54],s[i+55],s[i+56],s[i+57],s[i+58],s[i+59],s[i+60],s[i+61],s[i+62],s[i+63]
+          );
+
+  }
+  // slow but works
+  /*
+   for (int i=0; i < data_size; i++) {
+    printf("%d , ", s[i]);
+   }
+  */
+  printf("\n");
+
+  }
+//----------------
 
 // The name of this function is important for Arduino compatibility.
 void setup() {
@@ -127,11 +177,15 @@ void setup() {
        k++;
     }
 
+
   // Set up logging.
 
   static tflite::MicroErrorReporter micro_error_reporter;
   error_reporter = &micro_error_reporter;
 
+  #if  MODEL == 0
+    return;
+  #endif
   // Map the model into a usable data structure. This doesn't involve any
   // copying or parsing, it's a very lightweight operation.
   model = tflite::GetModel(g_model);
@@ -288,21 +342,29 @@ void loop() {
                    &audio_samples_size,
                    &audio_samples);
 
+      previous_time = current_time;
+
       for ( int j=0; j < audio_samples_size; j++){
         if (big_index >= FFT_SIZE) break;
         fft_samples[big_index] = int (audio_samples[j]);
         big_index++;
       }
       if (big_index == FFT_SIZE) {
-          cmsis_fft( fft_samples, FFT_SIZE);
+          break;
       }
-      previous_time = current_time;
+
   }
+
+  cmsis_fft( fft_samples, FFT_SIZE);
+
+#if MODEL == 0
+    printFFT(s, FFT_SIZE);
+    return;
+#endif
 //-------------------------------------
 // Copy feature buffer to input tensor
 // ------------------------------------
-
-  for (int i = 0; i < kFeatureElementCount; i++) {
+  for (int i = 0; i < kFeatureElementCount; i++) { // FFT_SIZE
     #if MODEL_TYPE  == M_kTfLiteInt8
        model_input_buffer[i] = s[i];
     #elif MODEL_TYPE  == M_kTfLiteFloat32
@@ -325,15 +387,19 @@ void loop() {
         printf("\n integer model output=%d",  y_val);
   #elif MODEL_TYPE  == M_kTfLiteFloat32
      #if MODEL == 1    //SOFTMAX
-        float y_val = output->data.f[1];  //skipping element[0]
+        //float y_val0 = output->data.f[0];
+        float y_val = output->data.f[1];  //  element[1]
+        //printf("\n y[0] =%5.3f  y[1] =%5.3f \n",  y_val0, y_val);
      #elif   MODEL == 2   // LOGISTIC
        float y_val = output->data.f[0];
      #endif
 
      printf("\n model output=%5.3f",     y_val);
      if (y_val > 0.5) {
-             printf ("\n model output=%5.3f --- failing water pump ---",     y_val  );
+             printf ("\n model output=%5.3f --- failing water pump ---\n",     y_val  );
      }
+     //printFFT(s, FFT_SIZE);
+
   #endif  // end of float32
 
 
