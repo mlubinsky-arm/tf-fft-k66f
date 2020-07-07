@@ -103,6 +103,8 @@ typedef enum {
 #define MODEL_TYPE M_kTfLiteFloat32
 #elif  MODEL == 2    // Logistic   float32
 #define MODEL_TYPE M_kTfLiteFloat32
+#elif  MODEL == 3      // SoftMax Quantization float32
+#define MODEL_TYPE M_kTfLiteInt8
 #else 
 #define MODEL 0  //reserved for data collection (prints FFT)
 #define MODEL_TYPE 0
@@ -213,9 +215,31 @@ void setup() {
     printf("\n ERROR adding AddFullyConnected");
     return;
   }
-#endif
+#elif  MODEL == 1
+  printf("\n adding Softmax");
+  if (micro_op_resolver.AddSoftmax() != kTfLiteOk) {
+     printf("\n ERROR adding  Softmax");
+    return;
+  }
 
-#if  MODEL == 1
+  printf("\n adding AddFullyConnected");
+  if (micro_op_resolver.AddFullyConnected() != kTfLiteOk) {
+    printf("\n ERROR adding AddFullyConnected");
+    return;
+  }
+
+  printf("\n adding AddQuantize()");
+  if (micro_op_resolver.AddQuantize() != kTfLiteOk) {
+     printf("\n ERROR adding  AddQuantize");
+    return;
+  }
+
+  printf("\n adding AddDequantize()");
+  if (micro_op_resolver.AddDequantize() != kTfLiteOk) {
+     printf("\n ERROR adding  AddDequantize");
+    return;
+  }
+#elif  MODEL == 3
   printf("\n adding Softmax");
   if (micro_op_resolver.AddSoftmax() != kTfLiteOk) {
      printf("\n ERROR adding  Softmax");
@@ -382,9 +406,12 @@ void loop() {
   // Obtain a pointer to the output tensor
   TfLiteTensor* output = interpreter->output(0);
 
-  #if MODEL_TYPE  == M_kTfLiteInt8
+  //#if MODEL_TYPE  == M_kTfLiteInt8
+  #if MODEL == 3
         int y_val = output->data.int8[0];
-        printf("\n integer model output=%d",  y_val);
+        //printf("\n integer model output [0]=%d [1]=%d [2]=%d",  y_val, output->data.int8[1], output->data.int8[2]) ;
+        printf("\n model output silence=%5.3f   no waterpump=%5.3f waterpump=%5.3f", output->data.f[0], output->data.f[1], output->data.f[2]);
+  
   #elif MODEL_TYPE  == M_kTfLiteFloat32
      #if MODEL == 1    //SOFTMAX
         //float y_val0 = output->data.f[0];
