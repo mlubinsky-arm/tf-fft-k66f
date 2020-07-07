@@ -103,7 +103,7 @@ typedef enum {
 #define MODEL_TYPE M_kTfLiteFloat32
 #elif  MODEL == 2    // Logistic   float32
 #define MODEL_TYPE M_kTfLiteFloat32
-#elif  MODEL == 3      // SoftMax Quantization float32
+#elif  MODEL == 3      // SoftMax Quantization int8
 #define MODEL_TYPE M_kTfLiteInt8
 #else 
 #define MODEL 0  //reserved for data collection (prints FFT)
@@ -170,7 +170,7 @@ void printFFT(short int* s, int data_size){
 void setup() {
     int k=0;
     while(k<3){
-       printf("\n setup() MODEL=%d  MODEL_TYPE =%d M_kTfLiteInt8=%d M_kTfLiteFloat32=%d", MODEL , MODEL_TYPE, M_kTfLiteInt8, M_kTfLiteFloat32);
+       printf("\n setup() MODEL=%d  MODEL_TYPE =%d ", MODEL , MODEL_TYPE);
        #if MODEL_TYPE  == M_kTfLiteInt8
            printf("\n setup() MODEL_TYPE  == kTfLiteInt8");
        #elif MODEL_TYPE  == M_kTfLiteFloat32
@@ -203,19 +203,7 @@ void setup() {
 
    static tflite::MicroMutableOpResolver<4> micro_op_resolver(error_reporter);
 
-#if  MODEL == 2
-  printf("\n adding Logistic");
-  if (micro_op_resolver.AddLogistic() != kTfLiteOk) {
-     printf("\n ERROR adding  Logistic");
-    return;
-  }
-
-  printf("\n adding AddFullyConnected");
-  if (micro_op_resolver.AddFullyConnected() != kTfLiteOk) {
-    printf("\n ERROR adding AddFullyConnected");
-    return;
-  }
-#elif  MODEL == 1
+#if  MODEL == 1     //Softmax + Quantize  float
   printf("\n adding Softmax");
   if (micro_op_resolver.AddSoftmax() != kTfLiteOk) {
      printf("\n ERROR adding  Softmax");
@@ -239,7 +227,20 @@ void setup() {
      printf("\n ERROR adding  AddDequantize");
     return;
   }
-#elif  MODEL == 3
+#elif  MODEL == 2      //Logistic
+  printf("\n adding Logistic");
+  if (micro_op_resolver.AddLogistic() != kTfLiteOk) {
+     printf("\n ERROR adding  Logistic");
+    return;
+  }
+
+  printf("\n adding AddFullyConnected");
+  if (micro_op_resolver.AddFullyConnected() != kTfLiteOk) {
+    printf("\n ERROR adding AddFullyConnected");
+    return;
+  }
+
+#elif  MODEL == 3  // Softmax + Quantize  int8
   printf("\n adding Softmax");
   if (micro_op_resolver.AddSoftmax() != kTfLiteOk) {
      printf("\n ERROR adding  Softmax");
@@ -386,7 +387,7 @@ void loop() {
     return;
 #endif
 //-------------------------------------
-// Copy feature buffer to input tensor
+// Copy FFT to input tensor
 // ------------------------------------
   for (int i = 0; i < kFeatureElementCount; i++) { // FFT_SIZE
     #if MODEL_TYPE  == M_kTfLiteInt8
@@ -406,26 +407,29 @@ void loop() {
   // Obtain a pointer to the output tensor
   TfLiteTensor* output = interpreter->output(0);
 
-  //#if MODEL_TYPE  == M_kTfLiteInt8
-  #if MODEL == 3
-        int y_val = output->data.int8[0];
-        //printf("\n integer model output [0]=%d [1]=%d [2]=%d",  y_val, output->data.int8[1], output->data.int8[2]) ;
-        printf("\n model output silence=%5.3f   no waterpump=%5.3f waterpump=%5.3f", output->data.f[0], output->data.f[1], output->data.f[2]);
-  
+
+  #if MODEL == 3 //softmax int8 input (may have 2 or 3 classes)
+        float y_0 = output->data.f[0];
+        float y_1 = output->data.f[1];
+        float y_2 = output->data.f[2];
+
+        printf("\n softmax int8 model output silence=%5.3f   no waterpump=%5.3f waterpump=%5.3f", y_0, y_1, y_2);
+
   #elif MODEL_TYPE  == M_kTfLiteFloat32
-     #if MODEL == 1    //SOFTMAX
-        //float y_val0 = output->data.f[0];
-        float y_val = output->data.f[1];  //  element[1]
-        //printf("\n y[0] =%5.3f  y[1] =%5.3f \n",  y_val0, y_val);
+     #if MODEL == 1    //SOFTMAX float input (may have 2 or 3 classes)
+        float y_0 = output->data.f[0];
+        float y_1 = output->data.f[1];
+        float y_2 = output->data.f[2];
+
+        printf("\n softmax float model output silence=%5.3f   no waterpump=%5.3f waterpump=%5.3f", y_0, y_1, y_2);
+
      #elif   MODEL == 2   // LOGISTIC
        float y_val = output->data.f[0];
+       printf("\n logistic model output=%5.3f", y_val);
+       if (y_val > 0.5) {
+             printf ("\n logistic model output=%5.3f --- failing water pump ---\n",     y_val  );
+       }
      #endif
-
-     printf("\n model output=%5.3f",     y_val);
-     if (y_val > 0.5) {
-             printf ("\n model output=%5.3f --- failing water pump ---\n",     y_val  );
-     }
-     //printFFT(s, FFT_SIZE);
 
   #endif  // end of float32
 
