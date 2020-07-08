@@ -40,7 +40,11 @@ limitations under the License.
 
 #include "mbed.h"
 //#include "tensor_thread.h"
-//DigitalOut led(LED1);
+// DigitalOut led(LED1);
+
+DigitalOut red  (LED_RED);
+DigitalOut green(LED_GREEN);
+DigitalOut blue (LED_BLUE);
 
 
 // Globals, used for compatibility with Arduino-style sketches.
@@ -119,6 +123,16 @@ typedef enum {
 #endif
 }  // namespace
 
+void testLED() {
+    while (1) {
+        printf("red\n\r");        red = 0; green = 1; blue = 1; wait(5.0);  
+        printf("green\n\r");      red = 1; green = 0; blue = 1; wait(5.0);  
+        printf("blue\n\r");       red = 1; green = 1; blue = 0; wait(5.0);
+        printf("red+green\n\r");  red = 0; green = 0; blue = 1; wait(5.0);
+        printf("green+blue\n\r"); red = 1; green = 0; blue = 0; wait(5.0);
+        printf("red+blue\n\r");   red = 0; green = 1; blue = 0; wait(5.0);
+    }
+}
 
 //--------------- cannot convert 'q15_t*' {aka 'short int*'} to 'int*'
 void printFFT(short int* s, int data_size){ 
@@ -168,6 +182,7 @@ void printFFT(short int* s, int data_size){
 
 // The name of this function is important for Arduino compatibility.
 void setup() {
+    //testLED();
     int k=0;
     while(k<3){
        printf("\n setup() MODEL=%d  MODEL_TYPE =%d ", MODEL , MODEL_TYPE);
@@ -417,11 +432,19 @@ void loop() {
 
   #elif MODEL_TYPE  == M_kTfLiteFloat32
      #if MODEL == 1    //SOFTMAX float input (may have 2 or 3 classes)
-        float y_0 = output->data.f[0];
-        float y_1 = output->data.f[1];
-        float y_2 = output->data.f[2];
+        float y_0 = output->data.f[0]; //silence
+        float y_1 = output->data.f[1]; //no water pump
+        float y_2 = output->data.f[2]; //water pump
 
         printf("\n softmax float model output silence=%5.3f   no waterpump=%5.3f waterpump=%5.3f", y_0, y_1, y_2);
+        if ((y_0 > y_1) &&  (y_0 > y_2)) { //silence
+            red = 1; green = 1; blue = 1; // no color
+        } else if ((y_1 > y_0) &&  (y_1 > y_2)) { //no water pump
+            red = 1; green = 0; blue = 1;  // green
+        } else { //water pump
+           red = 0; green = 1; blue = 1; // red
+           printf("\n -----------------------");
+        }
 
      #elif   MODEL == 2   // LOGISTIC
        float y_val = output->data.f[0];
